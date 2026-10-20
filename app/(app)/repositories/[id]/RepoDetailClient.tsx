@@ -1,22 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { mockRepositories, mockFiles } from '../../../_lib/mockData';
-
-const FILE_TREE = [
-  { id: 'src', label: 'src', type: 'folder', depth: 0, open: true },
-  { id: 'src/core', label: 'core', type: 'folder', depth: 1, open: true },
-  { id: 'src/core/analyzer.py', label: 'analyzer.py', type: 'file', depth: 2, fileId: 'f1', lang: 'python' },
-  { id: 'src/core/embeddings.py', label: 'embeddings.py', type: 'file', depth: 2, fileId: 'f2', lang: 'python' },
-  { id: 'src/core/retrieval.py', label: 'retrieval.py', type: 'file', depth: 2, fileId: 'f3', lang: 'python' },
-  { id: 'src/main.py', label: 'main.py', type: 'file', depth: 1, fileId: 'f4', lang: 'python' },
-  { id: 'src/api.py', label: 'api.py', type: 'file', depth: 1, fileId: 'f5', lang: 'python' },
-  { id: 'tests', label: 'tests', type: 'folder', depth: 0, open: false },
-  { id: 'tests/test_analyzer.py', label: 'test_analyzer.py', type: 'file', depth: 1, lang: 'python' },
-  { id: 'requirements.txt', label: 'requirements.txt', type: 'file', depth: 0, lang: 'text' },
-  { id: 'README.md', label: 'README.md', type: 'file', depth: 0, lang: 'markdown' },
-];
+import type { RepositoryDetail } from '@/app/actions/repositories';
 
 function syntaxHighlight(code: string, lang: string): React.ReactNode[] {
   const lines = code.split('\n');
@@ -60,9 +46,32 @@ const INSIGHTS = [
   { label: 'Complexity', value: 'Medium', icon: '⌁' },
 ];
 
-export default function RepoDetailClient({ repoId }: { repoId: string }) {
-  const repo = mockRepositories.find(r => r.id === repoId) ?? mockRepositories[0];
-  const [selectedFileId, setSelectedFileId] = useState('f1');
+export default function RepoDetailClient({
+  repoId,
+  initialData,
+}: {
+  repoId: string;
+  initialData?: RepositoryDetail | null;
+}) {
+  const repo = initialData ?? {
+    id: repoId,
+    name: "snippnxt-core",
+    description: "Core analysis engine for the SnippNXT platform",
+    language: "Python",
+    langColor: "#3572A5",
+    branch: "main",
+    fileCount: 0,
+    linesOfCode: 0,
+    lastAnalyzed: "Just now",
+    status: "indexed" as const,
+    stars: 0,
+    issues: 0,
+    url: "",
+    files: [],
+  };
+
+  const files = repo.files;
+  const [selectedFileId, setSelectedFileId] = useState(files[0]?.id ?? 'f1');
   const [activeTab, setActiveTab] = useState<'code' | 'insights' | 'history'>('code');
   const [showInsights, setShowInsights] = useState(true);
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(['src', 'src/core']));
@@ -70,7 +79,16 @@ export default function RepoDetailClient({ repoId }: { repoId: string }) {
   const [aiExplanation, setAiExplanation] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const selectedFile = mockFiles.find(f => f.id === selectedFileId) ?? mockFiles[0];
+  const selectedFile = files.find(f => f.id === selectedFileId) ?? files[0] ?? {
+    id: 'f1',
+    name: 'README.md',
+    path: 'README.md',
+    language: 'markdown',
+    size: '1 KB',
+    lines: 1,
+    content: '# Repository contains no files',
+    lastModified: 'Just now',
+  };
 
   const toggleFolder = (id: string) => {
     setOpenFolders(prev => {
@@ -99,7 +117,42 @@ export default function RepoDetailClient({ repoId }: { repoId: string }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const visibleTree = FILE_TREE.filter(node => {
+  const dynamicTree = useMemo(() => {
+    if (files.length === 0) return [];
+    const nodes: { id: string; label: string; type: 'folder' | 'file'; depth: number; fileId?: string; lang?: string }[] = [];
+    const foldersSeen = new Set<string>();
+
+    files.forEach(file => {
+      const parts = file.path.split('/');
+      let currentPath = '';
+      parts.forEach((part, index) => {
+        const isFile = index === parts.length - 1;
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        if (isFile) {
+          nodes.push({
+            id: currentPath,
+            label: part,
+            type: 'file',
+            depth: index,
+            fileId: file.id,
+            lang: file.language,
+          });
+        } else if (!foldersSeen.has(currentPath)) {
+          foldersSeen.add(currentPath);
+          nodes.push({
+            id: currentPath,
+            label: part,
+            type: 'folder',
+            depth: index,
+          });
+        }
+      });
+    });
+
+    return nodes;
+  }, [files]);
+
+  const visibleTree = dynamicTree.filter(node => {
     if (node.depth === 0) return true;
     const parentPath = node.id.split('/').slice(0, -1).join('/');
     return openFolders.has(parentPath);

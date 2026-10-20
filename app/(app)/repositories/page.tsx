@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { mockRepositories } from '../../_lib/mockData';
+import { useState, useEffect } from 'react';
+import { getRepositories, type RepositoryWithIssues } from '@/app/actions/repositories';
 
-type Repo = typeof mockRepositories[0];
+type Repo = RepositoryWithIssues;
 
 function AddRepoDialog({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<'form' | 'success'>('form');
@@ -148,12 +148,33 @@ function RepoCard({ repo }: { repo: Repo }) {
 }
 
 export default function RepositoriesPage() {
+  const [repositories, setRepositories] = useState<Repo[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const filtered = mockRepositories.filter(r => {
+  useEffect(() => {
+    let isMounted = true;
+    getRepositories()
+      .then((data) => {
+        if (isMounted) {
+          setRepositories(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load repositories:", err);
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filtered = repositories.filter(r => {
     const matchSearch = r.name.toLowerCase().includes(search.toLowerCase()) || r.description.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'all' || r.status === statusFilter;
     return matchSearch && matchStatus;
@@ -166,7 +187,11 @@ export default function RepositoriesPage() {
       <div className="page-header row-between">
         <div>
           <h1 className="page-title">Repositories</h1>
-          <p className="page-subtitle">{mockRepositories.length} repositories connected · {mockRepositories.filter(r => r.status === 'indexed').length} indexed</p>
+          <p className="page-subtitle">
+            {loading
+              ? 'Loading repositories from database...'
+              : `${repositories.length} repositories connected · ${repositories.filter(r => r.status === 'indexed').length} indexed`}
+          </p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowDialog(true)}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -210,7 +235,17 @@ export default function RepositoriesPage() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="repo-grid">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div
+              key={i}
+              className="repo-card skeleton"
+              style={{ height: 140, borderRadius: 12, opacity: 0.5 }}
+            />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

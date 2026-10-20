@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { mockIssues, type Issue } from '../../_lib/mockData';
+import { useState, useEffect } from 'react';
+import { getIssues, updateIssueStatus, type IssueItem as Issue } from '@/app/actions/issues';
 import Link from 'next/link';
 
 function SeverityIcon({ sev }: { sev: Issue['severity'] }) {
@@ -15,11 +15,32 @@ function SeverityIcon({ sev }: { sev: Issue['severity'] }) {
 }
 
 export default function IssuesPage() {
-  const [issues, setIssues] = useState<Issue[]>(mockIssues);
-  const [selected, setSelected] = useState<Issue | null>(issues[0]);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Issue | null>(null);
   const [severityFilter, setSeverityFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('open');
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    getIssues()
+      .then((data) => {
+        if (isMounted) {
+          setIssues(data);
+          setSelected(data[0] ?? null);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load issues:", err);
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filtered = issues.filter(i => {
     if (severityFilter !== 'all' && i.severity !== severityFilter) return false;
@@ -34,14 +55,16 @@ export default function IssuesPage() {
     info: issues.filter(i => i.severity === 'info' && i.status !== 'resolved').length,
   };
 
-  const resolve = (id: string) => {
+  const resolve = async (id: string) => {
     setIssues(prev => prev.map(i => i.id === id ? { ...i, status: 'resolved' } : i));
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, status: 'resolved' } : null);
+    await updateIssueStatus(id, 'resolved').catch(console.error);
   };
 
-  const ignore = (id: string) => {
+  const ignore = async (id: string) => {
     setIssues(prev => prev.map(i => i.id === id ? { ...i, status: 'ignored' } : i));
     if (selected?.id === id) setSelected(prev => prev ? { ...prev, status: 'ignored' } : null);
+    await updateIssueStatus(id, 'ignored').catch(console.error);
   };
 
   return (
@@ -49,7 +72,9 @@ export default function IssuesPage() {
       <div className="page-header row-between" style={{ marginBottom: 16 }}>
         <div>
           <h1 className="page-title">Issues</h1>
-          <p className="page-subtitle">Code quality findings · <span className="badge badge-warning">Illustrative sample data</span></p>
+          <p className="page-subtitle">
+            {loading ? 'Loading code quality findings from database...' : 'Code quality findings · Live database'}
+          </p>
         </div>
       </div>
 

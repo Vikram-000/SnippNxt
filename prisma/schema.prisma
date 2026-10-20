@@ -1,0 +1,314 @@
+// Prisma schema for SnippNXT
+// Documentation: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// -----------------------------------------------------------------------------
+// USER & AUTHENTICATION
+// -----------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  repositories  Repository[]
+  snippets      Snippet[]
+  folders       Folder[]
+  conversations AIConversation[]
+
+  @@map("users")
+}
+
+// -----------------------------------------------------------------------------
+// REPOSITORY LEVEL CODE INTELLIGENCE (From mockData.ts)
+// -----------------------------------------------------------------------------
+
+enum RepositoryStatus {
+  INDEXED
+  ANALYZING
+  PENDING
+  FAILED
+}
+
+model Repository {
+  id           String           @id @default(cuid())
+  userId       String?
+  user         User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  language     String
+  langColor    String           @default("#3572A5")
+  branch       String           @default("main")
+  fileCount    Int              @default(0)
+  linesOfCode  Int              @default(0)
+  lastAnalyzed DateTime?
+  status       RepositoryStatus @default(PENDING)
+  stars        Int              @default(0)
+  url          String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  files         File[]
+  issues        Issue[]
+  testSuites    TestSuite[]
+  activities    Activity[]
+  dependencies  DependencyNode[]
+  snippets      Snippet[]
+  conversations AIConversation[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("repositories")
+}
+
+model File {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  name         String
+  path         String
+  language     String
+  size         String?
+  lines        Int        @default(0)
+  content      String
+  lastModified DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  issues   Issue[]
+  snippets Snippet[]
+
+  @@unique([repositoryId, path])
+  @@index([repositoryId])
+  @@map("files")
+}
+
+enum IssueSeverity {
+  ERROR
+  WARNING
+  INFO
+}
+
+enum IssueStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+}
+
+model Issue {
+  id           String        @id @default(cuid())
+  repositoryId String
+  repository   Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  fileId       String?
+  file         File?         @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  filePath     String
+  line         Int
+  severity     IssueSeverity @default(WARNING)
+  title        String
+  description  String
+  rule         String
+  fix          String?
+  status       IssueStatus   @default(OPEN)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([repositoryId])
+  @@index([fileId])
+  @@index([status])
+  @@index([severity])
+  @@map("issues")
+}
+
+enum TestStatus {
+  PASSED
+  FAILED
+  SKIPPED
+}
+
+model TestSuite {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  name         String
+  file         String
+  total        Int        @default(0)
+  passed       Int        @default(0)
+  failed       Int        @default(0)
+  skipped      Int        @default(0)
+  duration     Float      @default(0.0)
+  lastRun      DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  tests TestCase[]
+
+  @@index([repositoryId])
+  @@map("test_suites")
+}
+
+model TestCase {
+  id        String     @id @default(cuid())
+  suiteId   String
+  suite     TestSuite  @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  name      String
+  status    TestStatus @default(PASSED)
+  duration  Float      @default(0.0)
+  error     String?
+  createdAt DateTime   @default(now())
+
+  @@index([suiteId])
+  @@map("test_cases")
+}
+
+enum ActivityType {
+  INDEXED
+  SEARCH
+  ISSUE
+  AI
+  TEST
+}
+
+model Activity {
+  id           String       @id @default(cuid())
+  repositoryId String?
+  repository   Repository?  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  type         ActivityType
+  message      String
+  createdAt    DateTime     @default(now())
+
+  @@index([repositoryId])
+  @@map("activities")
+}
+
+model DependencyNode {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  nodeId       String
+  label        String
+  x            Float
+  y            Float
+  imports      String     @default("[]")
+  size         String     @default("medium")
+  createdAt    DateTime   @default(now())
+
+  @@index([repositoryId])
+  @@map("dependency_nodes")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model AIConversation {
+  id           String      @id @default(cuid())
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repositoryId String?
+  repository   Repository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  title        String
+  lastMessage  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  messages AIMessage[]
+
+  @@index([userId])
+  @@index([repositoryId])
+  @@map("ai_conversations")
+}
+
+model AIMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole    @default(USER)
+  content        String
+  code           String?
+  codeLang       String?
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId])
+  @@map("ai_messages")
+}
+
+// -----------------------------------------------------------------------------
+// STUDENT CODE SNIPPET ORGANIZER (New Phase 1 & 2 Models)
+// -----------------------------------------------------------------------------
+
+model Folder {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  color       String?
+  icon        String?
+  parentId    String?
+  parent      Folder?   @relation("SubFolders", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Folder[]  @relation("SubFolders")
+  snippets    Snippet[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([parentId])
+  @@map("folders")
+}
+
+model Snippet {
+  id          String  @id @default(cuid())
+  userId      String?
+  user        User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  code        String
+  language    String
+  isFavorite  Boolean @default(false)
+  isArchived  Boolean @default(false)
+
+  // Organizational relationships
+  folderId String?
+  folder   Folder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  // Optional contextual link back to a repository or source file
+  repositoryId String?
+  repository   Repository? @relation(fields: [repositoryId], references: [id], onDelete: SetNull)
+  fileId       String?
+  file         File?       @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  lineStart    Int?
+  lineEnd      Int?
+
+  tags      Tag[]    @relation("SnippetTags")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([folderId])
+  @@index([repositoryId])
+  @@index([language])
+  @@map("snippets")
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  color     String?
+  snippets  Snippet[] @relation("SnippetTags")
+  createdAt DateTime  @default(now())
+
+  @@map("tags")
+}

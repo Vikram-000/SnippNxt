@@ -1,5 +1,7 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
-import { mockRepositories, mockActivity, mockIssues } from '../../_lib/mockData';
+import { connection } from 'next/server';
+import { getDashboardData } from '@/app/actions/dashboard';
 
 const StatCard = ({ label, value, change, icon, color }: {
   label: string; value: string | number; change?: string; icon: string; color?: string;
@@ -31,8 +33,59 @@ const ActivityIcon = ({ type }: { type: string }) => {
   );
 };
 
+function DashboardSkeleton() {
+  return (
+    <div>
+      <div className="page-header row-between">
+        <div>
+          <div className="skeleton" style={{ width: 220, height: 28, marginBottom: 8 }} />
+          <div className="skeleton" style={{ width: 340, height: 16 }} />
+        </div>
+        <div className="skeleton" style={{ width: 130, height: 36, borderRadius: 8 }} />
+      </div>
+
+      <div className="stats-grid">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="stat-card" style={{ opacity: 0.6 }}>
+            <div className="skeleton" style={{ width: 32, height: 32, borderRadius: 8 }} />
+            <div style={{ flex: 1 }}>
+              <div className="skeleton" style={{ width: 80, height: 12, marginBottom: 8 }} />
+              <div className="skeleton" style={{ width: 48, height: 20 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="two-col" style={{ marginBottom: 20 }}>
+        <div className="card" style={{ height: 280, opacity: 0.6 }}>
+          <div className="skeleton" style={{ width: 140, height: 16, marginBottom: 16 }} />
+          <div className="skeleton" style={{ width: '100%', height: 44, marginBottom: 8 }} />
+          <div className="skeleton" style={{ width: '100%', height: 44, marginBottom: 8 }} />
+          <div className="skeleton" style={{ width: '100%', height: 44 }} />
+        </div>
+        <div className="card" style={{ height: 280, opacity: 0.6 }}>
+          <div className="skeleton" style={{ width: 140, height: 16, marginBottom: 16 }} />
+          <div className="skeleton" style={{ width: '100%', height: 40, marginBottom: 8 }} />
+          <div className="skeleton" style={{ width: '100%', height: 40, marginBottom: 8 }} />
+          <div className="skeleton" style={{ width: '100%', height: 40 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
-  const openIssues = mockIssues.filter(i => i.status === 'open');
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+async function DashboardContent() {
+  await connection();
+  const data = await getDashboardData();
+  const { stats, recentRepositories, recentActivity, openIssuesCount } = data;
 
   return (
     <div>
@@ -51,10 +104,10 @@ export default function DashboardPage() {
 
       {/* Stats */}
       <div className="stats-grid">
-        <StatCard label="Repositories" value={mockRepositories.length} change="↑ 1 this week" icon="⬡" color="rgba(139,92,246,0.3)" />
-        <StatCard label="Files Analyzed" value="366" change="↑ 28 today" icon="⌕" color="rgba(34,211,238,0.2)" />
-        <StatCard label="Open Issues" value={openIssues.length} change="↓ 2 resolved" icon="⚠" color="rgba(251,191,36,0.2)" />
-        <StatCard label="AI Queries Today" value="17" change="avg 4.8s response" icon="✦" color="rgba(52,211,153,0.2)" />
+        <StatCard label="Repositories" value={stats.repositoryCount} change="↑ 1 this week" icon="⬡" color="rgba(139,92,246,0.3)" />
+        <StatCard label="Files Analyzed" value={stats.filesAnalyzed} change="↑ 28 today" icon="⌕" color="rgba(34,211,238,0.2)" />
+        <StatCard label="Open Issues" value={stats.openIssuesCount} change="↓ 2 resolved" icon="⚠" color="rgba(251,191,36,0.2)" />
+        <StatCard label="AI Queries Today" value={stats.aiQueriesCount} change="avg 4.8s response" icon="✦" color="rgba(52,211,153,0.2)" />
       </div>
 
       <div className="two-col" style={{ marginBottom: 20 }}>
@@ -68,7 +121,7 @@ export default function DashboardPage() {
             <Link href="/repositories" className="btn btn-ghost btn-sm">View all</Link>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {mockRepositories.slice(0, 4).map(repo => (
+            {recentRepositories.map(repo => (
               <Link
                 href={`/repositories/${repo.id}`}
                 key={repo.id}
@@ -100,10 +153,10 @@ export default function DashboardPage() {
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {mockActivity.map((item, i) => (
+            {recentActivity.map((item, i) => (
               <div key={item.id} style={{
                 display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0',
-                borderBottom: i < mockActivity.length - 1 ? '1px solid var(--border)' : 'none'
+                borderBottom: i < recentActivity.length - 1 ? '1px solid var(--border)' : 'none'
               }}>
                 <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                   <ActivityIcon type={item.type} />
@@ -147,7 +200,7 @@ export default function DashboardPage() {
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
             </svg>
             View Issues
-            {openIssues.length > 0 && <span className="badge badge-error" style={{ marginLeft: 4 }}>{openIssues.length}</span>}
+            {openIssuesCount > 0 && <span className="badge badge-error" style={{ marginLeft: 4 }}>{openIssuesCount}</span>}
           </Link>
           <Link href="/testing" className="btn btn-secondary">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
