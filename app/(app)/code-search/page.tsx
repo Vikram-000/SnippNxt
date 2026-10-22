@@ -2,20 +2,22 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { mockSearchResults } from '../../_lib/mockData';
+import { searchCode, type SearchResult } from '@/app/actions/search';
+import { getRepositories, type RepositoryWithIssues } from '@/app/actions/repositories';
 
 const EXAMPLE_QUERIES = [
-  'Where is authentication handled?',
-  'Find all database connection functions',
-  'Show me the error handling logic',
-  'Which files depend on the retrieval module?',
-  'Find all async functions',
+  'Binary search algorithm',
+  'RepositoryAnalyzer orchestration',
+  'Where is token budget handled?',
+  'Find database connection functions',
+  'Async code execution',
 ];
 
 const RECENT_SEARCHES = [
-  'token budget retrieval',
-  'RepositoryAnalyzer class',
-  'async def analyze',
+  'binary search',
+  'RepositoryAnalyzer',
+  'token budget',
+  'algorithms',
 ];
 
 function highlight(text: string, query: string) {
@@ -32,39 +34,51 @@ export default function CodeSearchPage() {
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState('');
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState(mockSearchResults);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [repos, setRepos] = useState<RepositoryWithIssues[]>([]);
   const [selectedRepo, setSelectedRepo] = useState('all');
   const [selectedLang, setSelectedLang] = useState('all');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const doSearch = (q: string) => {
+  useEffect(() => {
+    inputRef.current?.focus();
+    getRepositories().then(setRepos).catch(console.error);
+    // Initial search to showcase live DB index
+    doSearch('search');
+  }, []);
+
+  const doSearch = async (q: string) => {
     if (!q.trim()) return;
     setLoading(true);
     setSearched(q);
-    setTimeout(() => {
-      setResults(mockSearchResults.filter(r =>
-        (selectedRepo === 'all' || r.repo === selectedRepo) &&
-        r.preview.toLowerCase().includes(q.toLowerCase().split(' ').find(w => w.length > 3) ?? q.toLowerCase())
-      ));
+    try {
+      const data = await searchCode(q, {
+        repositoryId: selectedRepo,
+        language: selectedLang,
+      });
+      setResults(data);
+    } catch (err) {
+      console.error('Failed to execute search:', err);
+    } finally {
       setLoading(false);
-    }, 700);
+    }
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') doSearch(query);
   };
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
-
   return (
     <div>
       <div className="search-hero">
         <div className="eyebrow" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 10, fontWeight: 700, letterSpacing: '2px', color: '#b8a7ff', marginBottom: 12 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#8ce5bc', boxShadow: '0 0 8px rgba(140,229,188,0.5)', display: 'inline-block' }} />
-          SEMANTIC CODE SEARCH
+          HYBRID SEMANTIC CODE SEARCH
         </div>
-        <h1 className="page-title" style={{ fontSize: 22, textAlign: 'center' }}>Search across your entire codebase</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>Ask in natural language or search for exact code patterns.</p>
+        <h1 className="page-title" style={{ fontSize: 22, textAlign: 'center' }}>Search across repositories & student snippets</h1>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>
+          Combines BM25 token matching with vector cosine embeddings across files and saved code snippets.
+        </p>
 
         <div className="search-hero-input-wrap">
           <span className="search-field-icon" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>
@@ -78,7 +92,7 @@ export default function CodeSearchPage() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="Ask about your code..."
+            placeholder="Ask about your code in natural language or search patterns..."
           />
           <button
             className="btn btn-primary"
@@ -103,21 +117,37 @@ export default function CodeSearchPage() {
 
       <div className="row-between" style={{ margin: '16px 0', flexWrap: 'wrap', gap: 10 }}>
         <div className="row" style={{ gap: 10 }}>
-          <select className="select-field" value={selectedRepo} onChange={e => setSelectedRepo(e.target.value)}>
-            <option value="all">All Repositories</option>
-            <option value="snippnxt-core">snippnxt-core</option>
-            <option value="snippnxt-ui">snippnxt-ui</option>
-            <option value="auth-service">auth-service</option>
+          <select
+            className="select-field"
+            value={selectedRepo}
+            onChange={e => {
+              setSelectedRepo(e.target.value);
+              if (searched) doSearch(searched);
+            }}
+          >
+            <option value="all">All Repositories & Snippets</option>
+            {repos.map(r => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
           </select>
-          <select className="select-field" value={selectedLang} onChange={e => setSelectedLang(e.target.value)}>
+          <select
+            className="select-field"
+            value={selectedLang}
+            onChange={e => {
+              setSelectedLang(e.target.value);
+              if (searched) doSearch(searched);
+            }}
+          >
             <option value="all">All Languages</option>
             <option value="python">Python</option>
             <option value="typescript">TypeScript</option>
+            <option value="javascript">JavaScript</option>
+            <option value="sql">SQL</option>
           </select>
         </div>
         {searched && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {results.length} results for &quot;{searched}&quot; · <span className="badge badge-info">Demo results</span>
+            {results.length} results for &quot;{searched}&quot; · <span className="badge badge-success">Live SQLite Index</span>
           </div>
         )}
       </div>
@@ -143,29 +173,54 @@ export default function CodeSearchPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {(searched ? results : mockSearchResults).map(result => (
+              {results.map(result => (
                 <div key={result.id} className="search-result-card">
-                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                     <div className="row" style={{ gap: 10 }}>
+                      <span className="badge badge-muted" style={{ fontSize: 10, textTransform: 'uppercase' }}>
+                        {result.type}
+                      </span>
                       <span style={{ fontSize: 11, color: 'var(--accent-light)', fontWeight: 600 }}>{result.repo}</span>
                       <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>/</span>
-                      <Link href={`/repositories/repo-1`} style={{ fontSize: 12, color: 'var(--cyan)', textDecoration: 'none', fontFamily: 'var(--font-geist-mono, monospace)' }}>
-                        {result.file}:{result.lineStart}
-                      </Link>
+                      <span style={{ fontSize: 12, color: 'var(--cyan)', fontFamily: 'var(--font-geist-mono, monospace)' }}>
+                        {result.file}:{result.line}
+                      </span>
                     </div>
                     <div className="row" style={{ gap: 8 }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Relevance: {Math.round(result.relevance * 100)}%</span>
-                      <span className="badge badge-accent">python</span>
+                      <span className={`badge ${result.matchType === 'exact' ? 'badge-success' : result.matchType === 'semantic' ? 'badge-accent' : 'badge-warning'}`} style={{ fontSize: 10 }}>
+                        {result.matchType} ({result.score}%)
+                      </span>
+                      <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>~{result.tokenCount} tokens</span>
+                      <span className="badge badge-accent">{result.language}</span>
                     </div>
                   </div>
-                  <div style={{ padding: '12px 16px', fontFamily: 'var(--font-geist-mono, monospace)', fontSize: 11, lineHeight: 1.8, color: '#C9D1D9', background: '#0D1117', whiteSpace: 'pre' }}>
-                    {searched
-                      ? highlight(result.preview, searched.split(' ').find(w => w.length > 3) ?? searched)
-                      : result.preview}
+                  <div style={{ padding: '12px 16px', fontFamily: 'var(--font-geist-mono, monospace)', fontSize: 11, lineHeight: 1.8, color: '#C9D1D9', background: '#0D1117', whiteSpace: 'pre', overflowX: 'auto' }}>
+                    {highlight(result.preview, searched.split(' ').find(w => w.length > 3) ?? searched)}
                   </div>
-                  <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10 }}>
-                    <Link href={`/repositories/repo-1`} className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>Open file</Link>
-                    <Link href="/ai-assistant" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>Explain with AI</Link>
+                  <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      {result.type === 'snippet' ? (
+                        <Link href="/snippets" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>
+                          Open in Snippets
+                        </Link>
+                      ) : (
+                        <Link href="/repositories/repo-1" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>
+                          Open in File Explorer
+                        </Link>
+                      )}
+                      <Link href="/ai-assistant" className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>
+                        Ask AI Assistant
+                      </Link>
+                    </div>
+                    {result.tags && result.tags.length > 0 && (
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {result.tags.map(t => (
+                          <span key={t} style={{ fontSize: 10, color: 'var(--text-dim)', background: 'var(--surface-2)', padding: '2px 6px', borderRadius: 4 }}>
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -174,9 +229,9 @@ export default function CodeSearchPage() {
         </div>
 
         {/* Sidebar */}
-        <div style={{ width: 200, flexShrink: 0 }}>
+        <div style={{ width: 220, flexShrink: 0 }}>
           <div className="card" style={{ padding: 14 }}>
-            <div className="card-title" style={{ marginBottom: 12 }}>Recent searches</div>
+            <div className="card-title" style={{ marginBottom: 12 }}>Recent Searches</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {RECENT_SEARCHES.map(s => (
                 <button key={s} className="btn btn-ghost btn-sm"
@@ -190,6 +245,13 @@ export default function CodeSearchPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="card" style={{ padding: 14, marginTop: 14 }}>
+            <div className="card-title" style={{ marginBottom: 8 }}>Hybrid Search Engine</div>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+              Queries calculate multi-field cosine similarity alongside BM25 term weighting to rank exact and conceptual matches.
+            </p>
           </div>
         </div>
       </div>

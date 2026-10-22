@@ -98,17 +98,45 @@ export default function RepoDetailClient({
     });
   };
 
-  const handleAiExplain = () => {
+  const handleAiExplain = async () => {
+    if (!selectedFile || aiExplaining) return;
     setAiExplaining(true);
     setAiExplanation('');
-    const explanation = `**${selectedFile.name}** is the core analysis module for SnippNXT.\n\nThe \`RepositoryAnalyzer\` class orchestrates the full pipeline:\n1. **Index building** — loads and embeds all repository files.\n2. **Semantic retrieval** — uses \`SmartRetriever\` to find relevant code given a natural-language query.\n3. **Insight generation** — detects patterns like circular dependencies and high-complexity zones.\n\nThe class uses a dictionary cache (\`_index_cache\`) to avoid re-indexing on repeated calls. This is efficient but can cause unbounded memory growth in long-lived processes — see the related issue in the Issues panel.`;
-    let i = 0;
-    const interval = setInterval(() => {
-      i += 3;
-      setAiExplanation(explanation.slice(0, i));
-      if (i >= explanation.length) clearInterval(interval);
-    }, 20);
-    setTimeout(() => setAiExplaining(false), 100);
+
+    try {
+      const response = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: selectedFile.content,
+          language: selectedFile.language,
+          filename: selectedFile.name,
+          repositoryName: repo.name,
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error('Failed to stream code explanation');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+
+      while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        done = streamDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: !done });
+          setAiExplanation(prev => prev + chunk);
+        }
+      }
+    } catch (err) {
+      console.error('AI explanation failed:', err);
+      setAiExplanation('Failed to generate AI explanation. Please check connection and try again.');
+    } finally {
+      setAiExplaining(false);
+    }
   };
 
   const handleCopy = () => {
@@ -257,8 +285,8 @@ export default function RepoDetailClient({
 
           {/* AI explanation */}
           {aiExplanation && (
-            <div style={{ padding: '12px 16px', background: 'var(--surface)', borderTop: '1px solid var(--border-accent)', maxHeight: 160, overflow: 'auto' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', color: 'var(--accent-light)', marginBottom: 8 }}>AI EXPLANATION (DEMO)</div>
+            <div style={{ padding: '12px 16px', background: 'var(--surface)', borderTop: '1px solid var(--border-accent)', maxHeight: 220, overflow: 'auto' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', color: 'var(--accent-light)', marginBottom: 8 }}>AI CODE INTELLIGENCE EXPLANATION</div>
               <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{aiExplanation}</div>
             </div>
           )}

@@ -1,0 +1,107 @@
+{
+  "name": "snippnxt-vscode",
+  "displayName": "SnippNXT — Code Snippet Organizer",
+  "description": "Save, tag, and search your personal code snippets and get real-time AI code explanations directly in VS Code.",
+  "version": "0.1.0",
+  "publisher": "snippnxt",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Snippets",
+    "Programming Languages",
+    "Education"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "snippnxt",
+          "title": "SnippNXT",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "snippnxt": [
+        {
+          "id": "snippnxt-snippets",
+          "name": "Snippets & Coursework"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "snippnxt.refreshSnippets",
+        "title": "Refresh Snippets",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "snippnxt.saveSnippet",
+        "title": "SnippNXT: Save Selection as Snippet",
+        "icon": "$(bookmark)"
+      },
+      {
+        "command": "snippnxt.explainCode",
+        "title": "SnippNXT: Explain Code with AI",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "snippnxt.insertSnippet",
+        "title": "SnippNXT: Insert Snippet at Cursor"
+      },
+      {
+        "command": "snippnxt.openWebDashboard",
+        "title": "SnippNXT: Open Web App Dashboard"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "snippnxt.refreshSnippets",
+          "when": "view == snippnxt-snippets",
+          "group": "navigation"
+        },
+        {
+          "command": "snippnxt.saveSnippet",
+          "when": "view == snippnxt-snippets",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "snippnxt.saveSnippet",
+          "when": "editorHasSelection",
+          "group": "SnippNXT@1"
+        },
+        {
+          "command": "snippnxt.explainCode",
+          "when": "editorHasSelection",
+          "group": "SnippNXT@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SnippNXT",
+      "properties": {
+        "snippnxt.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "URL of the local SnippNXT Next.js server instance"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}
